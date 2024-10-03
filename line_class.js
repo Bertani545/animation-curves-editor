@@ -56,7 +56,7 @@ export class BezierCurve
 
   point_in_curve_time(t)
   {
-    if(t < 0 || t > 1) throw new Error("Error. Invalid argument for curve" + t);
+    if(t < 0 || t > 1) throw new Error("Error. Invalid argument for curve " + t);
     return gl_2Dmath.multiply_LML_4x4([t*t*t, t*t, t, 1], this.Matrix, [this.p1, this.p2, this.p3, this.p4]);
   }
 
@@ -64,20 +64,22 @@ export class BezierCurve
   {
     
     if(l < 0 || l > 1){
-      throw new Error(l);
+      throw new Error("Invalid length" + l);
     }
-    l *= this.length; //Actual value
+    l *= (this.length - 0.01); //Actual value
+    console.log(l)
 
     //Find it using binary search
     const idx = this.#smallest_or_equal_in_length(l);
-    if(Math.abs(this.length_to_time[idx][1] - l) < 0.001 || idx === n_p){return this.point_in_curve_time(this.length_to_time[idx][0]);}
+
+    if(Math.abs(this.length_to_time[idx][1] - l) < 0.001){return this.point_in_curve_time(this.length_to_time[idx][0]);}
 
 
     // Iterpolate lengths
     const ip = (l - this.length_to_time[idx][1]) / (this.length_to_time[idx + 1][1] - this.length_to_time[idx][1])
-
     let t = (1 - ip) * this.length_to_time[idx][0] +  ip * this.length_to_time[idx + 1][0]; 
-    if(t < 0) t = 0
+
+    //if(t < 0) t = 0
     return this.point_in_curve_time(t);
   }
 
@@ -85,13 +87,13 @@ export class BezierCurve
   #smallest_or_equal_in_length(p)
   {
     let l = 0; let r = n_p;
-    while(l < r)
+    while(l <= r)
     {
       const m = Math.floor((l+r)/2)
-      if(this.length_to_time[m][1] < p){l = m+1}
-      else{r = m}
+      if(this.length_to_time[m][1] > p){r = m-1}
+      else{l = m+1}
     }
-    return l;
+    return r;
 
   }
 
@@ -120,7 +122,8 @@ export class BezierCurve
     this.length_to_time = [[0, 0]];
     for(let i = 1; i <= n_p; i++)
     {
-      const t = 1/n_p * i;
+      let t = 1/n_p * i;
+      if(i === n_p) t = 1; 
       const dt = this.derivative(t);
       const dxdt = dt.x; const dydt = dt.y;
       this.length_to_time.push([t, this.length_to_time[i-1][1] + 1/n_p * Math.sqrt(dxdt*dxdt + dydt*dydt)])
