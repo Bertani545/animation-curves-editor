@@ -6,8 +6,25 @@
 	<title>Hello Mom!</title>
 </head>
 <body>
-	<h1>Mi primer programa en WebGL</h1>
-	<canvas width="1000" height="1000" id="c"></canvas>
+	<style>
+	    canvas {
+	      display: block;
+	      margin: 0 auto;
+	      border: 1px solid black;
+	    }
+
+	    button, input {
+	      margin: 20px auto;
+	      padding: 10px 20px;
+	      font-size: 20px;
+	    }
+	  </style>
+	<h1>Animation with Bézier Curves</h1>
+	<canvas width="1500" height="700" id="c"></canvas>
+	<button id="time_button">Time</button>
+	<button id="length_button">Length</button>
+	<input type="number" id="numberInput" placeholder="Enter animation duration" />
+	<button id="enter_button">Enter</button>
 	<script type="module" src="main.js"></script>
 </body>
 </html>

@@ -1,235 +1,8 @@
 
-import { createShader, createProgram, resizeCanvasToDisplaySize } from './webgl-utils.js'
+import * as webgl_utils from './webgl-utils.js'
+import { RenderPoints,  Point} from './point_class.js'
+import {BezierCurve, RenderCurves, Line} from './line_class.js'
 
-function getIdColor(id) {
-  const R = (id & 0xFF0000) >> 16 / 255; // Red
-  const G = (id & 0x00FF00) >> 8 / 255;  // Green
-  const B = (id & 0x0000FF) / 255;       // Blue
-  return  {r:R, g:G, b:B};
-}
-
-
-function getIdFromColor(pixelData) {
-  const r = pixelData[0];
-  const g = pixelData[1];
-  const b = pixelData[2];
-
-  // Reverse the ID encoding
-  const id = (r << 16) | (g << 8) | b;
-  return id;
-}
-
-function get_rotation_matrix(theta)
-{
-  return new Float32Array([Math.cos(theta), Math.sin(theta), 0, 
-                          -Math.sin(theta), Math.cos(theta), 0,
-                            0, 0 , 1]);
-}
-
-function get_translation_matrix(x, y)
-{
-  return new Float32Array([1, 0, 0,
-                           0, 1, 0,
-                           x, y, 1]);
-}
-
-function get_scale_matrix(sx, sy)
-{
-  return new Float32Array([sx, 0, 0,
-                           0, sy, 0,
-                           0, 0, 1]);
-}
-
-class Point
-{
-  constructor(id, trans, scale, theta, color){
-
-    this.color = {r:color[0], g:color[1], b:color[2], a:color[3]}
-    this.ID = id;
-
-    this.Translation = get_translation_matrix(trans[0], trans[1]);
-    this.Rotation = get_rotation_matrix(theta);
-    this.Scale = get_scale_matrix(scale[0], scale[1]);
-  }
-
-  get translation(){ return this.Translation;}
-  get scale(){ return this.Scale;}
-  get rotation(){ return this.Rotation;}
-
-  update_rotation_matrix(theta){this.Rotation = get_rotation_matrix(theta);}
-  update_translation_matrix(trans){this.Translation = get_translation_matrix(trans[0], trans[1]);}
-}
-
-class RenderPoints //A square :b
-{
-  constructor()
-  {
-      this.VAO = null;
-      this.Shader = null;
-      this.colorLocation = null;
-      this.rotationLocation = null;
-      this.translationLocation = null;
-      this.scaleLocation = null;
-
-      
-      //Pick stuff
-      this.pickLocation = null;
-      this.pickSacleLocation = null;
-      this.pickTransLocation = null;
-
-  }
-
-  static async build(gl)
-  {
-     const instance = new RenderPoints();
-
-      // ---------------- VAO construction. First so it links the other vbuffers automatically
-      var vao = gl.createVertexArray();
-      gl.bindVertexArray(vao); // Make it current
-
-      // Screen info
-    var vertices = [
-      // XY
-      -1, -1,
-      -1,  1,
-       1, -1,
-       1,  1,
-    ];
-
-      var indices = [
-        0, 1, 2,
-        1, 2, 3,
-      ]
-
-      var vertexBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-      var indexBuffer = gl.createBuffer();
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
-
-
-      // ------ Atribute stuff -------
-      gl.enableVertexAttribArray(0);
-
-      /*
-      var attribute
-      var size = 2;          // 2 components per iteration
-      var type = gl.FLOAT;   // the data is 32bit floats
-      var normalize = false; // don't normalize the data
-      var stride = 4*2;      // Size of the vertex
-      var offset = 0;        // start at the beginning of the buffer
-      */
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4*2, 0);
-
-
-      // ------------------ Shader construction -------------
-      var vertexShader = await createShader(gl, gl.VERTEX_SHADER, "./simple.vshader");
-      var fragmentShader = await createShader(gl, gl.FRAGMENT_SHADER, "./simple.fshader");
-      var program = await createProgram(gl, vertexShader, fragmentShader);
-
-
-
-      // Assign the created VAO and Shader to the instance
-      instance.VAO = vao;
-      instance.Shader = program;
-
-      //Save shader properties
-      gl.uniform2f(gl.getUniformLocation(program, "u_resolution"), gl.canvas.width, gl.canvas.height);
-      instance.colorLocation = gl.getUniformLocation(program, "u_color");
-      instance.rotationLocation = gl.getUniformLocation(program, "u_rot");
-      instance.translationLocation = gl.getUniformLocation(program, "u_trans");
-      instance.scaleLocation = gl.getUniformLocation(program, "u_scale");
-
-      // Pick stuff
-      instance.pickLocation = gl.getUniformLocation(program, "u_pick");
-      instance.pickScaleLocation = gl.getUniformLocation(program, "u_pick_scale");
-      instance.pickTransLocation = gl.getUniformLocation(program, "u_pick_trans");
-
-
-      // Return the instance
-      return instance;
-  }
-
-
-  normal_draw(gl, point)
-  {
-    gl.bindVertexArray(this.VAO);
-    gl.useProgram(this.Shader);
-
-    gl.uniform4f(this.colorLocation, point.color.r, point.color.g, point.color.b, point.color.a);
-    gl.uniform1f(this.pickLocation, 0.0);
-    gl.uniformMatrix3fv(this.rotationLocation, false, point.rotation);
-    gl.uniformMatrix3fv(this.translationLocation, false, point.translation);
-    gl.uniformMatrix3fv(this.scaleLocation, false, point.scale);
-
-
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-  }
-  pick_draw(gl, point, pw, ph, ndcX, ndcY)
-  {
-
-    var color =  getIdColor(point.ID);
-    
-    gl.uniformMatrix3fv(this.rotationLocation, false, point.rotation);
-    gl.uniformMatrix3fv(this.translationLocation, false, point.translation);
-    gl.uniformMatrix3fv(this.scaleLocation, false, point.scale);
-
-    gl.uniform4f(this.colorLocation, color.r, color.g, color.b, 1.0);
-    gl.uniform1f(this.pickLocation, 1.0);
-    gl.uniformMatrix3fv(this.pickScaleLocation, false, new Float32Array([1./pw,0,0,  0, 1./ph, 0,  0,0,1]));
-    gl.uniformMatrix3fv(this.pickTransLocation, false, new Float32Array([1,0,0,  0,1,0,  -ndcX, -ndcY, 1])); //Va por columnas
-
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-  }
-}
-
-
-function createAndSetupTexture(gl, i, data)
-{
-  //------- Texture stuff ------
-  // Create a texture.
-  var texture = gl.createTexture();
-  
-  // make unit i the active texture unit
-  gl.activeTexture(gl.TEXTURE0 + i);
-  
-  // Bind texture to 'texture unit i' 2D bind point
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  // Set the parameters so we don't need mips and so we're not filtering
-  // and we don't repeat
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-
-  return texture;
-}
-
-
-function buildFrameBuffer_ColorOnly(gl, i, width, height)
-{
-  var fbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  // Tell WebGL how to convert from clip space to pixels
-  //gl.viewport(0, 0, width, height);
-
-  var texture = createAndSetupTexture(gl, i);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-
-  // Bind the texture as where color is going to be written
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-
-  //console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE)
-  //Unbind
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-  return {ID: fbo,
-          ColorTexture: texture}
-}
 
 
 // Returns a random integer from 0 to range - 1.
@@ -253,17 +26,17 @@ async function main() {
   	throw new Error("Error. No se pudo cargar WebGL2");
   }
   // Canvas stuff
-  resizeCanvasToDisplaySize(gl.canvas);
+  webgl_utils.resizeCanvasToDisplaySize(gl.canvas);
   gl.viewport(0, 0, gl.canvas.width, gl.canvas.height); // [-1, 1] maps to [0, canvas.width/height]
   // Clear the canvas
-  gl.clearColor(0, 0, 0, 0);
+  gl.clearColor(0, 0, 0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
-  
 
   // ------------------------- Construct necesary VAOS ------------------------
 
   const renderPointsInstance = await RenderPoints.build(gl);
+  const renderCurvesInstance = await RenderCurves.build(gl);
   
   
 
@@ -292,22 +65,45 @@ async function main() {
   
   // New buffer to select objects
   var curr_ID = -1;
-  var select_obj =   buildFrameBuffer_ColorOnly(gl, 0, 1,1);
+  var select_obj =   webgl_utils.buildFrameBuffer_ColorOnly(gl, 0, 1,1);
 
 
   // ------------ Point definition ----------
 
-  var points = [] // No scope
-  points[0] = new Point(1, [-0.5, -0.5], [.1,.1], 1, [0, 0, 1, 1]);
-  points[1] = new Point(2, [ 0.5, -0.5], [.1,.1], 1, [0, 0, 1, 1]);
-  points[2] = new Point(3, [ 0.5,  0.5], [.1,.1], 1, [0, 0, 1, 1]);
-  points[3] = new Point(4, [-0.5,  0.5], [.1,.1], 1, [0, 0, 1, 1]);
+  const points = [] // this scope
+  points[0] = new Point(1, [-0.5, -0.5], [.02,.02], 0, [1, 1, 1, 1]);
+  points[1] = new Point(2, [ 0.5, -0.5], [.02,.02], 0, [1, 1, 1, 1]);
+  points[2] = new Point(3, [ 0.5,  0.5], [.02,.02], 0, [1, 1, 1, 1]);
+  points[3] = new Point(4, [-0.5,  0.5], [.02,.02], 0, [1, 1, 1, 1]);
+
+
+  const Animated_Square = new Point(-1, [0,0], [0.05, 0.05], 0, [0.953, 0.243, 0.988, 1]);
+
+
+  // ------------- Line definition ------------
+  const curve = new BezierCurve([points[0].translation[6], points[0].translation[7]], 
+                              [points[1].translation[6], points[1].translation[7]],
+                              [points[2].translation[6], points[2].translation[7]],
+                              [points[3].translation[6], points[3].translation[7]]);
+
+  const l1 = new Line([points[0].translation[6], points[0].translation[7]], [points[1].translation[6], points[1].translation[7]])
+  const l2 = new Line([points[3].translation[6], points[3].translation[7]], [points[2].translation[6], points[2].translation[7]])
+
+  curve.update_points();
+  renderCurvesInstance.update_points(gl, curve);
+
 
 
   // --------- Render cycle ------
+  var then  = 0;
+
   requestAnimationFrame(drawScene);
-  function drawScene()
+  function drawScene(now)
   {
+    // ---- Time -----
+    now *= 0.001; //To seconds
+    const deltaTime = now - then;
+    then = now;
 
 
     // See why if I delete this part it stops rendering
@@ -316,8 +112,6 @@ async function main() {
 
     mouse_ndcX = pixelX / gl.canvas.width * 2 - 1; 
     mouse_ndcY = pixelY / gl.canvas.height * 2 - 1;
-
-
 
     //Render to the screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -328,6 +122,42 @@ async function main() {
       renderPointsInstance.normal_draw(gl, p);
     }
 
+    renderCurvesInstance.draw(gl, l1)
+    renderCurvesInstance.draw(gl, l2)
+    renderCurvesInstance.draw(gl, curve)
+
+
+    // ---------- Animation stuff --------
+    //Time in the curve. Takes 5 secons
+    const t = (now % animation_duration) / animation_duration
+
+    switch(animate_method)
+    {
+      case 0:
+        {
+          const p_on_curve = curve.point_in_curve_time(t)
+          Animated_Square.update_translation_matrix([p_on_curve.x, p_on_curve.y]);
+          break;
+        }
+
+      case 1:
+        {
+          const p_on_curve = curve.point_in_curve_length(t)
+          Animated_Square.update_translation_matrix([p_on_curve.x, p_on_curve.y]);
+          break;
+        }
+      default:
+        Animated_Square.update_translation_matrix([0,0]);
+        break;
+    }
+    renderPointsInstance.normal_draw(gl, Animated_Square);
+    
+ 
+
+    
+
+
+
     // Render to one pixel so we can determine which object is being click
     gl.bindFramebuffer(gl.FRAMEBUFFER, select_obj.ID); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.viewport(0, 0, 1, 1);
@@ -335,7 +165,7 @@ async function main() {
       renderPointsInstance.pick_draw(gl, p, pixelWidth, pixelHeight, mouse_ndcX, mouse_ndcY);
     }
 
-    theta += 0.1;
+    theta += 1 * deltaTime;
     requestAnimationFrame(drawScene);
 
   }
@@ -354,8 +184,45 @@ async function main() {
         mouse_ndcY = pixelY / gl.canvas.height * 2 - 1;
 
         console.log(curr_ID)
+        
+        let ratio = gl.canvas.width / gl.canvas.height;
+        mouse_ndcX *= ratio;
+
+        //Points
         points[curr_ID].update_translation_matrix([mouse_ndcX, mouse_ndcY]);
 
+
+        //Curve
+        switch(curr_ID)
+        {
+          case 0:
+            {
+              curve.modify_p1(mouse_ndcX, mouse_ndcY); 
+              l1.modify_p1(mouse_ndcX, mouse_ndcY);
+              break;
+            }
+          case 1:
+            {
+              curve.modify_p2(mouse_ndcX, mouse_ndcY); 
+              l1.modify_p2(mouse_ndcX, mouse_ndcY);
+              break;
+            }
+          case 2:
+            {
+              curve.modify_p3(mouse_ndcX, mouse_ndcY); 
+              l2.modify_p2(mouse_ndcX, mouse_ndcY);
+              break;
+            }
+          case 3:
+            {
+              curve.modify_p4(mouse_ndcX, mouse_ndcY); 
+              l2.modify_p1(mouse_ndcX, mouse_ndcY);
+              break;
+            }
+          default: break;
+        }
+
+        //renderCurvesInstance.update_points(gl, curve);
      }
   });
 
@@ -369,7 +236,7 @@ async function main() {
     const pixelData = new Uint8Array(4);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixelData);
 
-    curr_ID = getIdFromColor(pixelData) - 1;
+    curr_ID = webgl_utils.getIdFromColor(pixelData) - 1;
     console.log('Picked object ID:', curr_ID);
 
 
@@ -381,7 +248,24 @@ async function main() {
     isDragging = false;
   });
 
+  document.getElementById('time_button').addEventListener('click', () => {
+      animate_method = 0;
+    });
+
+  document.getElementById('length_button').addEventListener('click', () => {
+    animate_method = 1;
+  });
+
+  const numberInput = document.getElementById('numberInput');
+
+  document.getElementById('enter_button').addEventListener('click', () => {
+    if(numberInput.value < 0.1) alert('The animation time is too low!');
+    else animation_duration = numberInput.value;
+  });
+
 
 }
 
+var animate_method = 0;
+var animation_duration = 5;
 main();
