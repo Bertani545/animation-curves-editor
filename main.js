@@ -235,7 +235,7 @@ async function main() {
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixelData);
 
     curr_ID = webgl_utils.getIdFromColor(pixelData) - 1;
-    console.log('Picked object ID:', curr_ID);
+    //console.log('Picked object ID:', curr_ID);
 
 
     isDragging = true;
