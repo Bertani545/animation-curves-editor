@@ -182,8 +182,6 @@ async function main() {
         pixelY = gl.canvas.height - mouseY * gl.canvas.height / gl.canvas.clientHeight - 1;
         mouse_ndcX = pixelX / gl.canvas.width * 2 - 1; 
         mouse_ndcY = pixelY / gl.canvas.height * 2 - 1;
-
-        console.log(curr_ID)
         
         let ratio = gl.canvas.width / gl.canvas.height;
         mouse_ndcX *= ratio;

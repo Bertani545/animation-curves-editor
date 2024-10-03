@@ -66,13 +66,12 @@ export class BezierCurve
     if(l < 0 || l > 1){
       throw new Error("Invalid length" + l);
     }
-    l *= (this.length - 0.01); //Actual value
-    console.log(l)
+    l *= this.length; //Actual value
 
     //Find it using binary search
     const idx = this.#smallest_or_equal_in_length(l);
 
-    if(Math.abs(this.length_to_time[idx][1] - l) < 0.001){return this.point_in_curve_time(this.length_to_time[idx][0]);}
+    if(Math.abs(this.length_to_time[idx][1] - l) < 0.001 || idx === n_p){return this.point_in_curve_time(this.length_to_time[idx][0]);}
 
 
     // Iterpolate lengths
@@ -130,7 +129,6 @@ export class BezierCurve
     }
 
     this.length = this.length_to_time[n_p][1];
-    console.log(this.length)
   }
 
 }
